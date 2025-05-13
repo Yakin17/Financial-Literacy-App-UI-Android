@@ -2,26 +2,26 @@ package com.example.financial_app;
 
 import android.os.Bundle;
 
-import androidx.activity.EdgeToEdge;
+
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
+
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.Bundle;
+import android.widget.ImageButton;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-
-import androidx.appcompat.app.AppCompatActivity;
-
+import androidx.appcompat.widget.Toolbar;
+import androidx.cardview.widget.CardView;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 public class MainActivity extends AppCompatActivity {
 
-    private TextView welcomeTextView;
-    private Button logoutButton;
+    private TextView textViewWelcome, textViewEmail, textViewUsername;
+    private ImageButton logoutButton;
+    private ConstraintLayout startLearningButton;
     private SharedPreferences sharedPreferences;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,13 +37,36 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Initialize views
-        welcomeTextView = findViewById(R.id.textViewWelcome);
-        logoutButton = findViewById(R.id.buttonLogout);
+        // Set up toolbar
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
+        getSupportActionBar().setDisplayShowTitleEnabled(false);
 
-        // Set welcome message
+        // Initialize views
+        textViewWelcome = findViewById(R.id.textViewWelcome);
+        textViewEmail = findViewById(R.id.textViewEmail);
+        textViewUsername = findViewById(R.id.textViewUsername);
+        logoutButton = findViewById(R.id.logoutButton);
+        startLearningButton = findViewById(R.id.startLearningButton);
+
+        // Get user information
         String username = sharedPreferences.getString("username", "Utilisateur");
-        welcomeTextView.setText("Bienvenue, " + username + "!");
+        String email = sharedPreferences.getString("email", "email@exemple.com");
+
+        // Set user information
+        textViewWelcome.setText(username + "!");
+        textViewEmail.setText(email);
+        textViewUsername.setText(username);
+
+        // Start Learning button click listener
+        startLearningButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Ici vous pourriez lancer l'activité des quiz
+                // Intent intent = new Intent(MainActivity.this, QuizActivity.class);
+                // startActivity(intent);
+            }
+        });
 
         // Logout button click listener
         logoutButton.setOnClickListener(new View.OnClickListener() {
