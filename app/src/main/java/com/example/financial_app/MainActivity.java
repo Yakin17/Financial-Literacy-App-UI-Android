@@ -62,9 +62,9 @@ public class MainActivity extends AppCompatActivity {
         startLearningButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Ici vous pourriez lancer l'activité des quiz
-                // Intent intent = new Intent(MainActivity.this, QuizActivity.class);
-                // startActivity(intent);
+                Intent intent = new Intent(MainActivity.this, ArticleListActivity.class);
+                startActivity(intent);
+
             }
         });
 
