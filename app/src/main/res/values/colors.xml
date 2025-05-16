@@ -6,4 +6,6 @@
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
     <color name="gray_light">#F2F2F2</color>
+    <color name="correctAnswerBackground">#E8F5E9</color>
+    <color name="incorrectAnswerBackground">#FFEBEE</color>
 </resources>

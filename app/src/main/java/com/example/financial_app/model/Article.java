@@ -1,7 +1,7 @@
 package com.example.financial_app.model;
-
+import java.io.Serializable;
 import java.time.LocalDateTime;
-public class Article {
+public class Article implements Serializable {
     private Long id;
     private String titre;
     private String contenu;

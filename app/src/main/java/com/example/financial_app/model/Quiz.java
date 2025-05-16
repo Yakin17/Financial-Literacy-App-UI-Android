@@ -1,6 +1,6 @@
 package com.example.financial_app.model;
-
-public class Quiz {
+import java.io.Serializable;
+public class Quiz implements Serializable {
     private Long id;
     private Long articleId;
     private String question;

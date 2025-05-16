@@ -11,7 +11,7 @@ import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import android.content.Intent;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -144,13 +144,15 @@ public class ArticleListActivity extends AppCompatActivity implements ArticleAda
 
     @Override
     public void onArticleClick(Article article) {
-        // Ici, vous pouvez ouvrir l'activité de détail de l'article
-        Toast.makeText(this, "Article sélectionné : " + article.getTitre(), Toast.LENGTH_SHORT).show();
         Log.d(TAG, "Article cliqué: " + article.getId() + " - " + article.getTitre());
 
-        // Dans une implémentation complète, vous lanceriez une nouvelle activité pour afficher l'article
-        // Intent intent = new Intent(ArticleListActivity.this, ArticleDetailActivity.class);
-        // intent.putExtra("ARTICLE_ID", article.getId());
-        // startActivity(intent);
+        // Création de l'intent pour l'activité de détail
+        Intent intent = new Intent(ArticleListActivity.this, ArticleDetailActivity.class);
+
+        // Passage de l'article comme extra (assurez-vous que Article implémente Parcelable ou Serializable)
+        intent.putExtra("article", article);
+
+        // Démarrage de l'activité de détail
+        startActivity(intent);
     }
 }
