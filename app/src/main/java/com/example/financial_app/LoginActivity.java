@@ -55,6 +55,9 @@ public class LoginActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 String newUrl = serverUrlEditText.getText().toString().trim();
+                // Supprimer tous les espaces dans l'URL pour éviter les erreurs de connexion
+                newUrl = newUrl.replaceAll("\\s+", "");
+
                 if (!newUrl.isEmpty() && newUrl.startsWith("http")) {
                     // Ensure URL ends with /api/
                     if (!newUrl.endsWith("/api/")) {
