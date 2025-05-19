@@ -18,7 +18,7 @@ public class Score implements Serializable {
         this.utilisateurId = utilisateurId;
         this.quizId = quizId;
         this.pointsObtenus = pointsObtenus;
-        this.datePassage = datePassagee;
+        this.datePassage = datePassage;
     }
 
     public Long getId() {
