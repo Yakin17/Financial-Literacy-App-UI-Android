@@ -4,8 +4,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 
-import com.google.gson.Gson;
-
 /**
  * Classe utilitaire pour gérer la session utilisateur et les préférences de l'application
  */
@@ -36,6 +34,12 @@ public class SessionManager {
      * Crée une session utilisateur après une connexion réussie
      */
     public void createLoginSession(Long userId, String username, String email, String role, String token) {
+        // Vérification de l'ID utilisateur
+        if (userId == null || userId <= 0) {
+            Log.e(TAG, "Tentative de création de session avec un ID utilisateur invalide: " + userId);
+            return;
+        }
+
         editor.putLong(KEY_USER_ID, userId);
         editor.putString(KEY_USERNAME, username);
         editor.putString(KEY_USER_EMAIL, email);
@@ -46,7 +50,22 @@ public class SessionManager {
         // Commettre les changements
         editor.apply();
 
-        Log.d(TAG, "Session utilisateur créée pour: " + username);
+        Log.d(TAG, "Session utilisateur créée pour: " + username + " avec ID: " + userId);
+
+        // Vérifier immédiatement si les données ont été correctement enregistrées
+        verifySessionData();
+    }
+
+    /**
+     * Vérifie si les données de session ont été correctement enregistrées
+     */
+    private void verifySessionData() {
+        Log.d(TAG, "Vérification des données de session:");
+        Log.d(TAG, "isLoggedIn: " + isLoggedIn());
+        Log.d(TAG, "userId: " + getUserId());
+        Log.d(TAG, "username: " + getUsername());
+        Log.d(TAG, "email: " + getUserEmail());
+        Log.d(TAG, "role: " + getUserRole());
     }
 
     /**
@@ -60,7 +79,12 @@ public class SessionManager {
      * Récupère l'ID de l'utilisateur connecté
      */
     public Long getUserId() {
-        return pref.getLong(KEY_USER_ID, -1);
+        long userId = pref.getLong(KEY_USER_ID, -1);
+        // Log pour débogage
+        if (userId == -1 && isLoggedIn()) {
+            Log.w(TAG, "Attention: l'utilisateur est marqué comme connecté mais aucun ID n'est trouvé");
+        }
+        return userId;
     }
 
     /**
@@ -141,5 +165,19 @@ public class SessionManager {
     public int getQuizScore(Long quizId) {
         String key = "quiz_score_" + quizId;
         return pref.getInt(key, -1);
+    }
+
+    /**
+     * Pour le débogage: affiche toutes les valeurs dans les SharedPreferences
+     */
+    public void debugPrintAllValues() {
+        Log.d(TAG, "--- DÉBUT DEBUG SHAREDPREFERENCES ---");
+        Log.d(TAG, "isLoggedIn: " + isLoggedIn());
+        Log.d(TAG, "userId: " + getUserId());
+        Log.d(TAG, "username: " + getUsername());
+        Log.d(TAG, "email: " + getUserEmail());
+        Log.d(TAG, "role: " + getUserRole());
+        Log.d(TAG, "auth token exists: " + (getAuthToken() != null));
+        Log.d(TAG, "--- FIN DEBUG SHAREDPREFERENCES ---");
     }
 }
