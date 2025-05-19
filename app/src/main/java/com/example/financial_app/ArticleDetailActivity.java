@@ -203,8 +203,10 @@ public class ArticleDetailActivity extends AppCompatActivity {
                             article.setHasQuiz(true);
                         }
 
+
                         // Vérifier si l'utilisateur a déjà complété le quiz
                         checkQuizCompletion(quizzes.get(0).getId());
+
                     } else {
                         startQuizCard.setVisibility(View.GONE);
                         // Mise à jour du flag dans l'article
@@ -225,6 +227,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
                 Log.e(TAG, "Erreur lors du chargement des quiz", t);
                 showError("Erreur réseau: " + t.getMessage());
                 startQuizCard.setVisibility(View.GONE);
+
             }
         });
     }
@@ -259,6 +262,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<Map<String, Boolean>> call, Throwable t) {
                 Log.e(TAG, "Erreur lors de la vérification du quiz", t);
+
             }
         });
     }
