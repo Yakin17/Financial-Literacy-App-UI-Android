@@ -61,6 +61,10 @@ public class ArticleDetailActivity extends AppCompatActivity {
 
         initViews();
 
+        // Assurez-vous que les cartes sont initialement invisibles
+        startQuizCard.setVisibility(View.GONE);
+        quizSectionCard.setVisibility(View.GONE);
+
         if (getIntent().hasExtra("article_id")) {
             Long articleId = getIntent().getLongExtra("article_id", -1);
             if (articleId != -1) {
@@ -68,15 +72,12 @@ public class ArticleDetailActivity extends AppCompatActivity {
             } else {
                 showError("ID d'article invalide");
             }
-        } else if (getIntent().hasExtra("article")) {
+        } else if (getIntent().getSerializableExtra("article") != null) {
             article = (Article) getIntent().getSerializableExtra("article");
             displayArticle();
 
-            if (article.isHasQuiz()) {
-                loadQuizzes(article.getId());
-            } else {
-                startQuizCard.setVisibility(View.GONE);
-            }
+            // Toujours charger les quiz pour vérifier s'ils existent
+            loadQuizzes(article.getId());
         } else {
             showError("Aucun article spécifié");
         }
@@ -150,11 +151,8 @@ public class ArticleDetailActivity extends AppCompatActivity {
                     article = response.body();
                     displayArticle();
 
-                    if (article.isHasQuiz()) {
-                        loadQuizzes(article.getId());
-                    } else {
-                        startQuizCard.setVisibility(View.GONE);
-                    }
+                    // Toujours charger les quiz pour vérifier s'ils existent
+                    loadQuizzes(article.getId());
                 } else {
                     showError("Impossible de charger l'article");
                 }
@@ -170,6 +168,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
     }
 
     private void loadQuizzes(Long articleId) {
+        Log.d(TAG, "Chargement des quizzes pour l'article ID: " + articleId);
         showLoading(true);
         ApiService apiService = RetrofitClient.getClient().create(ApiService.class);
         Call<List<Quiz>> call = apiService.getQuizzesByArticleId(articleId);
@@ -180,12 +179,24 @@ public class ArticleDetailActivity extends AppCompatActivity {
                 showLoading(false);
                 if (response.isSuccessful() && response.body() != null) {
                     quizzes = response.body();
+                    Log.d(TAG, "Quizzes chargés: " + quizzes.size());
+
+                    // Mettre à jour la visibilité de la carte de quiz
                     if (!quizzes.isEmpty()) {
                         startQuizCard.setVisibility(View.VISIBLE);
+                        // Mise à jour du flag dans l'article
+                        if (article != null) {
+                            article.setHasQuiz(true);
+                        }
                     } else {
                         startQuizCard.setVisibility(View.GONE);
+                        // Mise à jour du flag dans l'article
+                        if (article != null) {
+                            article.setHasQuiz(false);
+                        }
                     }
                 } else {
+                    Log.e(TAG, "Erreur lors du chargement des quizzes: " + response.code());
                     showError("Impossible de charger les quiz");
                     startQuizCard.setVisibility(View.GONE);
                 }
@@ -194,9 +205,9 @@ public class ArticleDetailActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<List<Quiz>> call, Throwable t) {
                 showLoading(false);
+                Log.e(TAG, "Erreur lors du chargement des quiz", t);
                 showError("Erreur réseau: " + t.getMessage());
                 startQuizCard.setVisibility(View.GONE);
-                Log.e(TAG, "Erreur lors du chargement des quiz", t);
             }
         });
     }
@@ -305,6 +316,4 @@ public class ArticleDetailActivity extends AppCompatActivity {
     private void showError(String message) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
-
-
 }
