@@ -1,10 +1,11 @@
 package com.example.financial_app.network;
 
-
 import com.example.financial_app.model.Article;
 import com.example.financial_app.model.Quiz;
+import com.example.financial_app.model.ScoreResponse;
 
 import java.util.List;
+import java.util.Map;
 
 import retrofit2.Call;
 import retrofit2.http.Body;
@@ -13,6 +14,7 @@ import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.PUT;
 import retrofit2.http.Path;
+
 public interface ApiService {
     @GET("articles")
     Call<List<Article>> getAllArticles();
@@ -47,4 +49,18 @@ public interface ApiService {
 
     @DELETE("quizzes/{id}")
     Call<Void> deleteQuiz(@Path("id") Long id);
+
+    // Score endpoints
+    @POST("scores/submit/{utilisateurId}/{quizId}/{points}")
+    Call<ScoreResponse> submitQuizScore(
+            @Path("utilisateurId") Long utilisateurId,
+            @Path("quizId") Long quizId,
+            @Path("points") int points
+    );
+
+    @GET("scores/check/{utilisateurId}/{quizId}")
+    Call<Map<String, Boolean>> checkQuizCompletion(
+            @Path("utilisateurId") Long utilisateurId,
+            @Path("quizId") Long quizId
+    );
 }
