@@ -1,18 +1,16 @@
 package com.example.financial_app;
 
 import android.os.Bundle;
-
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.content.Intent;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -34,16 +32,26 @@ public class ArticleListActivity extends AppCompatActivity implements ArticleAda
     private List<Article> articleList;
     private ArticleService articleService;
 
+    // Nouveaux conteneurs pour gérer la visibilité
+    private LinearLayout loadingContainer;
+    private LinearLayout emptyContainer;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_article_list);
 
+        // Initialisation des vues
         recyclerViewArticles = findViewById(R.id.recyclerViewArticles);
         progressBar = findViewById(R.id.progressBar);
         textViewEmpty = findViewById(R.id.textViewEmpty);
         backButton = findViewById(R.id.backButton);
+
+        // Nouveaux conteneurs
+        loadingContainer = findViewById(R.id.loadingContainer);
+        emptyContainer = findViewById(R.id.emptyContainer);
+
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
@@ -64,10 +72,8 @@ public class ArticleListActivity extends AppCompatActivity implements ArticleAda
 
         articleService = new ArticleService(this);
 
-
-
-        // Puis essayer avec les vraies données
-         loadArticles();
+        // Chargement des articles
+        loadArticles();
     }
 
     private void testWithMockData() {
@@ -133,13 +139,16 @@ public class ArticleListActivity extends AppCompatActivity implements ArticleAda
     }
 
     private void showLoading(boolean isLoading) {
-        progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        // Gestion des nouveaux conteneurs
+        loadingContainer.setVisibility(isLoading ? View.VISIBLE : View.GONE);
         recyclerViewArticles.setVisibility(isLoading ? View.GONE : View.VISIBLE);
+        emptyContainer.setVisibility(View.GONE); // Masquer l'état vide pendant le chargement
     }
 
     private void showEmptyState(boolean isEmpty) {
-        textViewEmpty.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
+        emptyContainer.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
         recyclerViewArticles.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
+        loadingContainer.setVisibility(View.GONE); // Masquer le chargement
     }
 
     @Override
@@ -149,7 +158,7 @@ public class ArticleListActivity extends AppCompatActivity implements ArticleAda
         // Création de l'intent pour l'activité de détail
         Intent intent = new Intent(ArticleListActivity.this, ArticleDetailActivity.class);
 
-        // Passage de l'article comme extra (assurez-vous que Article implémente Parcelable ou Serializable)
+        // Passage de l'article comme extra
         intent.putExtra("article", article);
 
         // Démarrage de l'activité de détail

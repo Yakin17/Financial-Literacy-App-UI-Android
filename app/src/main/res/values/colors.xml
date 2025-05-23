@@ -9,5 +9,65 @@
     <color name="correctAnswerBackground">#E8F5E9</color>
     <color name="incorrectAnswerBackground">#FFEBEE</color>
 
+    <!-- Primary Colors -->
+    <color name="primary_color">#6366F1</color>
+    <color name="primary_variant">#4F46E5</color>
+    <color name="primary_light">#A5B4FC</color>
+    <color name="primary_dark">#3730A3</color>
+
+    <!-- Secondary Colors -->
+    <color name="secondary_color">#EC4899</color>
+    <color name="secondary_variant">#DB2777</color>
+    <color name="secondary_light">#F9A8D4</color>
+
+    <!-- Accent Colors -->
+    <color name="accent_color">#10B981</color>
+    <color name="accent_light">#6EE7B7</color>
+
+    <!-- Text Colors -->
+    <color name="text_primary">#1F2937</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="text_hint">#9CA3AF</color>
+    <color name="text_disabled">#D1D5DB</color>
+
+    <!-- Background Colors -->
+    <color name="background_primary">#FFFFFF</color>
+    <color name="background_secondary">#F9FAFB</color>
+    <color name="background_tertiary">#F3F4F6</color>
+
+    <!-- Surface Colors -->
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F8FAFC</color>
+
+    <!-- Icon Colors -->
+    <color name="icon_tint">#6B7280</color>
+    <color name="icon_active">#6366F1</color>
+
+    <!-- Status Colors -->
+    <color name="success">#10B981</color>
+    <color name="warning">#F59E0B</color>
+    <color name="error">#EF4444</color>
+    <color name="info">#3B82F6</color>
+
+    <!-- Gradient Colors -->
+    <color name="gradient_start">#667EEA</color>
+    <color name="gradient_center">#764BA2</color>
+    <color name="gradient_end">#F093FB</color>
+
+    <!-- Shadow Colors -->
+    <color name="shadow_light">#1A000000</color>
+    <color name="shadow_medium">#33000000</color>
+    <color name="shadow_dark">#4D000000</color>
+
+    <!-- Border Colors -->
+    <color name="border_light">#E5E7EB</color>
+    <color name="border_medium">#D1D5DB</color>
+    <color name="border_dark">#9CA3AF</color>
+
+    <!-- Overlay Colors -->
+    <color name="overlay_light">#0A000000</color>
+    <color name="overlay_medium">#1F000000</color>
+    <color name="overlay_dark">#33000000</color>
+
 
 </resources>

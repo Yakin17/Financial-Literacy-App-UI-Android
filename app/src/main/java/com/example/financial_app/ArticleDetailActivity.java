@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -43,13 +44,14 @@ public class ArticleDetailActivity extends AppCompatActivity {
     private static final String TAG = "ArticleDetailActivity";
 
     private TextView textViewTitle, textViewAuthorAndDate, textViewContent;
-    private CardView startQuizCard, quizSectionCard;
+    private CardView startQuizCard, quizSectionCard, feedbackCard;
     private Button buttonStartQuiz, buttonSubmitAnswer, buttonNextQuestion;
     private TextView textViewQuizQuestion, textViewFeedback;
     private TextView textViewQuizTitle, textViewQuizDescription;
     private RadioGroup radioGroupAnswers;
     private RadioButton[] radioButtons = new RadioButton[4];
     private ProgressBar progressBar;
+    private LinearLayout loadingContainer;
     private ImageButton backButton;
 
     private Article article;
@@ -86,6 +88,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
         // Assurez-vous que les cartes sont initialement invisibles
         startQuizCard.setVisibility(View.GONE);
         quizSectionCard.setVisibility(View.GONE);
+        feedbackCard.setVisibility(View.GONE);
 
         if (getIntent().hasExtra("article_id")) {
             Long articleId = getIntent().getLongExtra("article_id", -1);
@@ -114,6 +117,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
         textViewContent = findViewById(R.id.textViewContent);
         startQuizCard = findViewById(R.id.startQuizCard);
         quizSectionCard = findViewById(R.id.quizSectionCard);
+        feedbackCard = findViewById(R.id.feedbackCard);
         buttonStartQuiz = findViewById(R.id.buttonStartQuiz);
         buttonSubmitAnswer = findViewById(R.id.buttonSubmitAnswer);
         buttonNextQuestion = findViewById(R.id.buttonNextQuestion);
@@ -121,6 +125,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
         textViewFeedback = findViewById(R.id.textViewFeedback);
         radioGroupAnswers = findViewById(R.id.radioGroupAnswers);
         progressBar = findViewById(R.id.progressBar);
+        loadingContainer = findViewById(R.id.loadingContainer);
         backButton = findViewById(R.id.backButton);
         textViewQuizTitle = findViewById(R.id.textViewQuizTitle);
         textViewQuizDescription = findViewById(R.id.textViewQuizDescription);
@@ -157,7 +162,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
         buttonSubmitAnswer.setOnClickListener(v -> checkAnswer());
 
         buttonNextQuestion.setOnClickListener(v -> {
-            textViewFeedback.setVisibility(View.GONE);
+            feedbackCard.setVisibility(View.GONE);
             buttonSubmitAnswer.setVisibility(View.VISIBLE);
             buttonNextQuestion.setVisibility(View.GONE);
 
@@ -383,13 +388,13 @@ public class ArticleDetailActivity extends AppCompatActivity {
         if (isCorrect) {
             score++;
             textViewFeedback.setText("✓ Correct ! Bonne réponse.");
-            textViewFeedback.setBackgroundResource(R.color.correctAnswerBackground);
+            feedbackCard.setCardBackgroundColor(getColor(R.color.correctAnswerBackground));
         } else {
             textViewFeedback.setText("✗ Incorrect. La bonne réponse était : " + currentQuiz.getReponseCorrecte());
-            textViewFeedback.setBackgroundResource(R.color.incorrectAnswerBackground);
+            feedbackCard.setCardBackgroundColor(getColor(R.color.incorrectAnswerBackground));
         }
 
-        textViewFeedback.setVisibility(View.VISIBLE);
+        feedbackCard.setVisibility(View.VISIBLE);
         buttonSubmitAnswer.setVisibility(View.GONE);
 
         if (currentQuizIndex < quizzes.size() - 1) {
@@ -519,7 +524,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
     }
 
     private void showLoading(boolean isLoading) {
-        progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
+        loadingContainer.setVisibility(isLoading ? View.VISIBLE : View.GONE);
     }
 
     @Override
