@@ -1,4 +1,5 @@
 package com.example.financial_app.service;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
@@ -13,6 +14,7 @@ import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.financial_app.model.Article;
+import com.example.financial_app.util.SharedPreferencesManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -41,6 +43,7 @@ public class ArticleService {
 
     public interface ArticleCallback {
         void onSuccess(List<Article> articles);
+
         void onError(String message);
     }
 
@@ -85,7 +88,7 @@ public class ArticleService {
         // Configurer une politique de nouvelle tentative
         stringRequest.setRetryPolicy(new DefaultRetryPolicy(
                 10000, // 10 secondes de timeout
-                2,     // 2 tentatives max
+                2, // 2 tentatives max
                 DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
 
         Log.d(TAG, "Ajout de la requête à la file d'attente");
@@ -139,22 +142,28 @@ public class ArticleService {
 
     private Map<String, String> createAuthHeaders() {
         Map<String, String> headers = new HashMap<>();
-        String token = sharedPreferences.getString("token", "");
+        SharedPreferencesManager prefsManager = SharedPreferencesManager.getInstance(context);
+        String token = prefsManager.getToken();
         Log.d(TAG, "Token d'authentification: " + (token.isEmpty() ? "absent" : "présent"));
 
         if (!token.isEmpty()) {
             headers.put("Authorization", "Bearer " + token);
+            Log.d(TAG, "En-tête d'authentification ajouté: Bearer " + token);
+        } else {
+            Log.e(TAG, "Aucun token d'authentification trouvé dans les préférences");
         }
 
         // Ajouter des en-têtes Accept pour garantir que le serveur renvoie du JSON
         headers.put("Accept", "application/json");
+        headers.put("Content-Type", "application/json");
         return headers;
     }
 
     private void logVolleyError(VolleyError error) {
         if (error.networkResponse != null) {
             Log.e(TAG, "Erreur réseau: code=" + error.networkResponse.statusCode +
-                    ", data=" + (error.networkResponse.data != null ? new String(error.networkResponse.data) : "aucune donnée"));
+                    ", data="
+                    + (error.networkResponse.data != null ? new String(error.networkResponse.data) : "aucune donnée"));
         } else {
             Log.e(TAG, "Erreur sans réponse réseau: " + error.toString(), error);
         }

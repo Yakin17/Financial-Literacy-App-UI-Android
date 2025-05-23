@@ -4,26 +4,26 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Log;
 
-/**
- * Classe utilitaire pour gérer la session utilisateur et les préférences de l'application
- */
+import java.util.HashSet;
+import java.util.Set;
+
 public class SessionManager {
     private static final String TAG = "SessionManager";
 
-    // Constantes pour SharedPreferences
-    private static final String PREF_NAME = "FinancialAppPrefs";
-    private static final String KEY_USER_ID = "user_id";
+    // Shared preferences file name
+    private static final String PREF_NAME = "FinancialAppLogin";
+    private static final String KEY_IS_LOGGED_IN = "isLoggedIn";
+    private static final String KEY_USER_ID = "userId";
     private static final String KEY_USERNAME = "username";
-    private static final String KEY_USER_EMAIL = "user_email";
-    private static final String KEY_USER_ROLE = "user_role";
-    private static final String KEY_IS_LOGGED_IN = "is_logged_in";
-    private static final String KEY_AUTH_TOKEN = "auth_token";
+    private static final String KEY_EMAIL = "email";
+    private static final String KEY_AUTH_TOKEN = "authToken";
+    private static final String KEY_COMPLETED_QUIZZES = "completedQuizzes";
+    private static final String KEY_QUIZ_SCORES_PREFIX = "quizScore_";
 
     private SharedPreferences pref;
     private SharedPreferences.Editor editor;
     private Context context;
 
-    // Constructeur
     public SessionManager(Context context) {
         this.context = context;
         pref = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
@@ -31,153 +31,134 @@ public class SessionManager {
     }
 
     /**
-     * Crée une session utilisateur après une connexion réussie
+     * Créer une session de connexion
      */
-    public void createLoginSession(Long userId, String username, String email, String role, String token) {
-        // Vérification de l'ID utilisateur
-        if (userId == null || userId <= 0) {
-            Log.e(TAG, "Tentative de création de session avec un ID utilisateur invalide: " + userId);
-            return;
-        }
-
+    public void createLoginSession(Long userId, String username, String email, String authToken) {
+        editor.putBoolean(KEY_IS_LOGGED_IN, true);
         editor.putLong(KEY_USER_ID, userId);
         editor.putString(KEY_USERNAME, username);
-        editor.putString(KEY_USER_EMAIL, email);
-        editor.putString(KEY_USER_ROLE, role);
-        editor.putBoolean(KEY_IS_LOGGED_IN, true);
-        editor.putString(KEY_AUTH_TOKEN, token);
+        editor.putString(KEY_EMAIL, email);
+        editor.putString(KEY_AUTH_TOKEN, authToken);
 
-        // Commettre les changements
+        // commit changes
         editor.apply();
 
-        Log.d(TAG, "Session utilisateur créée pour: " + username + " avec ID: " + userId);
-
-        // Vérifier immédiatement si les données ont été correctement enregistrées
-        verifySessionData();
-    }
-
-    /**
-     * Vérifie si les données de session ont été correctement enregistrées
-     */
-    private void verifySessionData() {
-        Log.d(TAG, "Vérification des données de session:");
-        Log.d(TAG, "isLoggedIn: " + isLoggedIn());
-        Log.d(TAG, "userId: " + getUserId());
-        Log.d(TAG, "username: " + getUsername());
-        Log.d(TAG, "email: " + getUserEmail());
-        Log.d(TAG, "role: " + getUserRole());
+        Log.d(TAG, "Session de connexion créée pour " + username + " avec ID: " + userId);
     }
 
     /**
      * Vérifie si l'utilisateur est connecté
      */
     public boolean isLoggedIn() {
-        return pref.getBoolean(KEY_IS_LOGGED_IN, false);
-    }
-
-    /**
-     * Récupère l'ID de l'utilisateur connecté
-     */
-    public Long getUserId() {
+        boolean loginFlag = pref.getBoolean(KEY_IS_LOGGED_IN, false);
         long userId = pref.getLong(KEY_USER_ID, -1);
-        // Log pour débogage
-        if (userId == -1 && isLoggedIn()) {
-            Log.w(TAG, "Attention: l'utilisateur est marqué comme connecté mais aucun ID n'est trouvé");
+
+        // On est vraiment connecté seulement si le flag est true ET qu'on a un ID utilisateur valide
+        boolean reallyLoggedIn = loginFlag && userId > 0;
+        if (loginFlag && userId <= 0) {
+            Log.e(TAG, "Incohérence détectée: flag login=true mais userId invalide (" + userId + ")");
         }
-        return userId;
+        return reallyLoggedIn;
     }
 
     /**
-     * Récupère le nom d'utilisateur
-     */
-    public String getUsername() {
-        return pref.getString(KEY_USERNAME, null);
-    }
-
-    /**
-     * Récupère l'email de l'utilisateur
-     */
-    public String getUserEmail() {
-        return pref.getString(KEY_USER_EMAIL, null);
-    }
-
-    /**
-     * Récupère le rôle de l'utilisateur
-     */
-    public String getUserRole() {
-        return pref.getString(KEY_USER_ROLE, "ROLE_USER");
-    }
-
-    /**
-     * Vérifie si l'utilisateur est admin
-     */
-    public boolean isAdmin() {
-        return "ROLE_ADMIN".equals(getUserRole());
-    }
-
-    /**
-     * Récupère le token d'authentification
-     */
-    public String getAuthToken() {
-        return pref.getString(KEY_AUTH_TOKEN, null);
-    }
-
-    /**
-     * Déconnecte l'utilisateur et efface les données de session
+     * Déconnecte l'utilisateur
      */
     public void logout() {
-        editor.clear();
+        // Ne pas effacer les quizzes complétés et scores lors de la déconnexion
+        // On garde juste les informations de connexion
+        editor.remove(KEY_IS_LOGGED_IN);
+        editor.remove(KEY_USER_ID);
+        editor.remove(KEY_USERNAME);
+        editor.remove(KEY_EMAIL);
+        editor.remove(KEY_AUTH_TOKEN);
         editor.apply();
-        Log.d(TAG, "Session utilisateur terminée");
+
+        Log.d(TAG, "Utilisateur déconnecté");
     }
 
     /**
-     * Marque un quiz comme complété par l'utilisateur
+     * Marque un quiz comme complété
      */
     public void markQuizAsCompleted(Long quizId) {
-        String key = "quiz_completed_" + quizId;
-        editor.putBoolean(key, true);
+        Set<String> completedQuizzes = pref.getStringSet(KEY_COMPLETED_QUIZZES, new HashSet<>());
+        Set<String> updatedSet = new HashSet<>(completedQuizzes);
+        updatedSet.add(String.valueOf(quizId));
+
+        editor.putStringSet(KEY_COMPLETED_QUIZZES, updatedSet);
         editor.apply();
+
         Log.d(TAG, "Quiz " + quizId + " marqué comme complété");
     }
 
     /**
-     * Vérifie si un quiz a déjà été complété par l'utilisateur
+     * Vérifie si un quiz a été complété
      */
-    public boolean isQuizCompleted(Long quizId) {
-        String key = "quiz_completed_" + quizId;
-        return pref.getBoolean(key, false);
+    public boolean hasCompletedQuiz(Long quizId) {
+        Set<String> completedQuizzes = pref.getStringSet(KEY_COMPLETED_QUIZZES, new HashSet<>());
+        return completedQuizzes.contains(String.valueOf(quizId));
     }
 
     /**
-     * Sauvegarde le score d'un quiz
+     * Enregistre le score d'un quiz
      */
     public void saveQuizScore(Long quizId, int score) {
-        String key = "quiz_score_" + quizId;
+        String key = KEY_QUIZ_SCORES_PREFIX + quizId;
         editor.putInt(key, score);
         editor.apply();
-        Log.d(TAG, "Score " + score + " sauvegardé pour le quiz " + quizId);
+
+        Log.d(TAG, "Score " + score + " enregistré pour le quiz " + quizId);
     }
 
     /**
      * Récupère le score d'un quiz
      */
     public int getQuizScore(Long quizId) {
-        String key = "quiz_score_" + quizId;
-        return pref.getInt(key, -1);
+        String key = KEY_QUIZ_SCORES_PREFIX + quizId;
+        return pref.getInt(key, 0);
     }
 
     /**
-     * Pour le débogage: affiche toutes les valeurs dans les SharedPreferences
+     * Getters
+     */
+    public Long getUserId() {
+        return pref.getLong(KEY_USER_ID, -1);
+    }
+
+    public String getUsername() {
+        return pref.getString(KEY_USERNAME, null);
+    }
+
+    public String getEmail() {
+        return pref.getString(KEY_EMAIL, null);
+    }
+
+    public String getAuthToken() {
+        return pref.getString(KEY_AUTH_TOKEN, null);
+    }
+
+    /**
+     * Méthode de débogage pour afficher toutes les valeurs
      */
     public void debugPrintAllValues() {
-        Log.d(TAG, "--- DÉBUT DEBUG SHAREDPREFERENCES ---");
+        Log.d(TAG, "==== SESSION VALUES ====");
         Log.d(TAG, "isLoggedIn: " + isLoggedIn());
         Log.d(TAG, "userId: " + getUserId());
         Log.d(TAG, "username: " + getUsername());
-        Log.d(TAG, "email: " + getUserEmail());
-        Log.d(TAG, "role: " + getUserRole());
-        Log.d(TAG, "auth token exists: " + (getAuthToken() != null));
-        Log.d(TAG, "--- FIN DEBUG SHAREDPREFERENCES ---");
+        Log.d(TAG, "email: " + getEmail());
+        Log.d(TAG, "authToken: " + (getAuthToken() != null ? "Set" : "Not Set"));
+
+        // Afficher les quiz complétés
+        Set<String> completedQuizzes = pref.getStringSet(KEY_COMPLETED_QUIZZES, new HashSet<>());
+        Log.d(TAG, "completedQuizzes: " + completedQuizzes.toString());
+
+        // Afficher les scores des quiz
+        for (String quizId : completedQuizzes) {
+            String key = KEY_QUIZ_SCORES_PREFIX + quizId;
+            int score = pref.getInt(key, -1);
+            Log.d(TAG, "Quiz " + quizId + " score: " + score);
+        }
+
+        Log.d(TAG, "==== END SESSION VALUES ====");
     }
 }

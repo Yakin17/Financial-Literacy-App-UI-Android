@@ -1,12 +1,8 @@
 package com.example.financial_app;
 
 import android.os.Bundle;
-
-
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.widget.ImageButton;
 import android.view.View;
 import android.widget.Button;
@@ -14,25 +10,41 @@ import android.widget.TextView;
 import androidx.appcompat.widget.Toolbar;
 import androidx.cardview.widget.CardView;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import com.example.financial_app.network.RetrofitClient;
+import com.example.financial_app.util.SharedPreferencesManager;
+import android.util.Log;
+import com.example.financial_app.network.ApiService;
+import com.example.financial_app.model.UserStats;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import java.io.IOException;
+import java.util.List;
+import com.example.financial_app.model.Score;
 
 public class MainActivity extends AppCompatActivity {
 
-    private TextView textViewWelcome, textViewEmail, textViewUsername;
+    private static final String TAG = "MainActivity";
+    private TextView textViewWelcome, textViewEmail, textViewUsername, textViewQuizStats;
     private ImageButton logoutButton;
     private ConstraintLayout startLearningButton;
-    private SharedPreferences sharedPreferences;
-
+    private SharedPreferencesManager prefsManager;
+    private Button buttonLogin, buttonLogout;
+    private ApiService apiService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Initialize SharedPreferences
-        sharedPreferences = getSharedPreferences("UserPrefs", MODE_PRIVATE);
+        // Initialiser le contexte pour RetrofitClient
+        RetrofitClient.setContext(getApplicationContext());
+
+        // Initialiser SharedPreferencesManager
+        prefsManager = SharedPreferencesManager.getInstance(this);
 
         // Check if user is logged in
-        if (!sharedPreferences.contains("token")) {
+        if (!prefsManager.isLoggedIn()) {
             goToLoginActivity();
             return;
         }
@@ -48,10 +60,14 @@ public class MainActivity extends AppCompatActivity {
         textViewUsername = findViewById(R.id.textViewUsername);
         logoutButton = findViewById(R.id.logoutButton);
         startLearningButton = findViewById(R.id.startLearningButton);
+        textViewQuizStats = findViewById(R.id.textViewQuizStats);
+        buttonLogin = findViewById(R.id.buttonLogin);
+        buttonLogout = findViewById(R.id.buttonLogout);
 
         // Get user information
-        String username = sharedPreferences.getString("username", "Utilisateur");
-        String email = sharedPreferences.getString("email", "email@exemple.com");
+        String username = prefsManager.getUsername();
+        String email = prefsManager.getEmail();
+        Long userId = prefsManager.getUserId();
 
         // Set user information
         textViewWelcome.setText(username + "!");
@@ -64,7 +80,6 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 Intent intent = new Intent(MainActivity.this, ArticleListActivity.class);
                 startActivity(intent);
-
             }
         });
 
@@ -73,14 +88,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 // Clear user session
-                SharedPreferences.Editor editor = sharedPreferences.edit();
-                editor.clear();
-                editor.apply();
+                prefsManager.clearSession();
 
                 // Redirect to login
                 goToLoginActivity();
             }
         });
+
+        checkLoginStatus();
     }
 
     private void goToLoginActivity() {
@@ -88,5 +103,87 @@ public class MainActivity extends AppCompatActivity {
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(intent);
         finish();
+    }
+
+    private void checkLoginStatus() {
+        if (prefsManager.isLoggedIn()) {
+            // Récupérer les informations de l'utilisateur
+            String username = prefsManager.getUsername();
+            String email = prefsManager.getEmail();
+            Long userId = prefsManager.getUserId();
+
+            // Mettre à jour l'interface utilisateur
+            textViewUsername.setText(username);
+            textViewEmail.setText(email);
+
+            // Récupérer les statistiques de l'utilisateur
+            loadUserStats();
+
+            // Afficher les boutons de connexion/déconnexion appropriés
+            buttonLogin.setVisibility(View.GONE);
+            buttonLogout.setVisibility(View.VISIBLE);
+        } else {
+            // Réinitialiser l'interface utilisateur
+            textViewUsername.setText("Non connecté");
+            textViewEmail.setText("");
+            textViewQuizStats.setText("Quiz complétés: 0\nScore moyen: 0%");
+
+            // Afficher les boutons de connexion/déconnexion appropriés
+            buttonLogin.setVisibility(View.VISIBLE);
+            buttonLogout.setVisibility(View.GONE);
+        }
+    }
+
+    private void loadUserStats() {
+        Long userId = prefsManager.getUserId();
+        if (userId == null) {
+            Log.e(TAG, "loadUserStats: User ID is null");
+            return;
+        }
+
+        Log.d(TAG, "loadUserStats: Loading stats for user ID: " + userId);
+        apiService = RetrofitClient.getClient().create(ApiService.class);
+        apiService.getUserScores(userId).enqueue(new Callback<List<Score>>() {
+            @Override
+            public void onResponse(Call<List<Score>> call, Response<List<Score>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    List<Score> scores = response.body();
+                    Log.d(TAG, "loadUserStats: Received " + scores.size() + " scores");
+
+                    // Calculer les statistiques
+                    int totalQuizzes = scores.size();
+                    int totalScore = 0;
+                    for (Score score : scores) {
+                        totalScore += score.getPoints();
+                    }
+                    double averageScore = totalQuizzes > 0 ? (double) totalScore / totalQuizzes : 0;
+
+                    // Mettre à jour l'interface utilisateur
+                    String statsText = String.format("Quizzes completed: %d\nAverage score: %.1f%%",
+                            totalQuizzes, averageScore);
+                    Log.d(TAG, "loadUserStats: New stats text: " + statsText);
+                    updateQuizStats(statsText);
+                } else {
+                    Log.e(TAG, "loadUserStats: Error response - " + response.code());
+                    if (response.errorBody() != null) {
+                        try {
+                            Log.e(TAG, "loadUserStats: Error body - " + response.errorBody().string());
+                        } catch (IOException e) {
+                            Log.e(TAG, "loadUserStats: Error reading error body", e);
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<Score>> call, Throwable t) {
+                Log.e(TAG, "loadUserStats: Network error", t);
+            }
+        });
+    }
+
+    private void updateQuizStats(String statsText) {
+        Log.d(TAG, "Mise à jour des statistiques affichées");
+        textViewQuizStats.setText(statsText);
     }
 }

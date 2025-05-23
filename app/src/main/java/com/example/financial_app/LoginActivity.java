@@ -1,8 +1,8 @@
 package com.example.financial_app;
 
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -13,6 +13,7 @@ import com.example.financial_app.model.LoginRequest;
 import com.example.financial_app.model.LoginResponse;
 import com.example.financial_app.network.AuthService;
 import com.example.financial_app.network.RetrofitClient;
+import com.example.financial_app.util.SharedPreferencesManager;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -21,22 +22,23 @@ public class LoginActivity extends AppCompatActivity {
     private EditText emailEditText, passwordEditText, serverUrlEditText;
     private Button loginButton, saveUrlButton;
     private TextView registerLink;
-    private SharedPreferences sharedPreferences;
+    private SharedPreferencesManager prefsManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
+        // Initialiser le contexte pour RetrofitClient
+        RetrofitClient.setContext(getApplicationContext());
 
-        sharedPreferences = getSharedPreferences("UserPrefs", MODE_PRIVATE);
+        // Initialiser SharedPreferencesManager
+        prefsManager = SharedPreferencesManager.getInstance(this);
 
-
-        if (sharedPreferences.contains("token")) {
+        if (prefsManager.isLoggedIn()) {
             goToMainActivity();
             return;
         }
-
 
         emailEditText = findViewById(R.id.editTextEmail);
         passwordEditText = findViewById(R.id.editTextPassword);
@@ -45,11 +47,9 @@ public class LoginActivity extends AppCompatActivity {
         saveUrlButton = findViewById(R.id.buttonSaveUrl);
         registerLink = findViewById(R.id.textViewRegister);
 
-
-        String savedUrl = sharedPreferences.getString("serverUrl", "http://192.168.1.128:8080/api/");
+        String savedUrl = prefsManager.getServerUrl();
         serverUrlEditText.setText(savedUrl);
         RetrofitClient.setBaseUrl(savedUrl);
-
 
         saveUrlButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -61,12 +61,7 @@ public class LoginActivity extends AppCompatActivity {
                         newUrl = newUrl + "/api/";
                     }
 
-
-                    SharedPreferences.Editor editor = sharedPreferences.edit();
-                    editor.putString("serverUrl", newUrl);
-                    editor.apply();
-
-
+                    prefsManager.saveServerUrl(newUrl);
                     RetrofitClient.setBaseUrl(newUrl);
 
                     Toast.makeText(LoginActivity.this, "URL du serveur mis à jour", Toast.LENGTH_SHORT).show();
@@ -76,14 +71,12 @@ public class LoginActivity extends AppCompatActivity {
             }
         });
 
-
         loginButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 performLogin();
             }
         });
-
 
         registerLink.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -98,36 +91,35 @@ public class LoginActivity extends AppCompatActivity {
         String email = emailEditText.getText().toString().trim();
         String password = passwordEditText.getText().toString().trim();
 
-
         if (email.isEmpty() || password.isEmpty()) {
             Toast.makeText(this, "Veuillez remplir tous les champs", Toast.LENGTH_SHORT).show();
             return;
         }
 
-
         LoginRequest loginRequest = new LoginRequest(email, password);
 
-
         AuthService authService = RetrofitClient.getClient().create(AuthService.class);
-
 
         authService.login(loginRequest).enqueue(new Callback<LoginResponse>() {
             @Override
             public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    // Save user details and token in SharedPreferences
-                    SharedPreferences.Editor editor = sharedPreferences.edit();
-                    editor.putString("token", response.body().getToken());
-                    editor.putLong("userId", response.body().getId());
-                    editor.putString("username", response.body().getUsername());
-                    editor.putString("email", response.body().getEmail());
-                    editor.putString("role", response.body().getRole());
-                    editor.apply();
+                    // Save user details using SharedPreferencesManager
+                    String token = response.body().getToken();
+                    Log.d("LoginActivity", "Token reçu du serveur: " + (token != null ? "présent" : "absent"));
+                    
+                    prefsManager.saveToken(token);
+                    prefsManager.saveUserId(response.body().getId());
+                    prefsManager.saveUsername(response.body().getUsername());
+                    prefsManager.saveEmail(response.body().getEmail());
+                    prefsManager.saveRole(response.body().getRole());
 
+                    // Vérifier que le token a bien été sauvegardé
+                    String savedToken = prefsManager.getToken();
+                    Log.d("LoginActivity", "Token sauvegardé dans les préférences: " + (savedToken.isEmpty() ? "absent" : "présent"));
 
                     goToMainActivity();
                 } else {
-
                     String errorMessage = "Échec de la connexion";
                     if (response.errorBody() != null) {
                         try {
@@ -143,7 +135,8 @@ public class LoginActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<LoginResponse> call, Throwable t) {
                 // Handle network error
-                Toast.makeText(LoginActivity.this, "Erreur de connexion : " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(LoginActivity.this, "Erreur de connexion : " + t.getMessage(), Toast.LENGTH_SHORT)
+                        .show();
             }
         });
     }

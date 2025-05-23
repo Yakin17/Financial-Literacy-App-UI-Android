@@ -28,7 +28,8 @@ import com.example.financial_app.model.Quiz;
 import com.example.financial_app.model.ScoreResponse;
 import com.example.financial_app.network.ApiService;
 import com.example.financial_app.network.RetrofitClient;
-import com.example.financial_app.util.SessionManager;
+import com.example.financial_app.service.ScoreService;
+import com.example.financial_app.util.SharedPreferencesManager;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ import java.util.Map;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
+
 public class ArticleDetailActivity extends AppCompatActivity {
 
     private static final String TAG = "ArticleDetailActivity";
@@ -47,6 +49,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
     private CardView startQuizCard, quizSectionCard;
     private Button buttonStartQuiz, buttonSubmitAnswer, buttonNextQuestion;
     private TextView textViewQuizQuestion, textViewFeedback;
+    private TextView textViewQuizTitle, textViewQuizDescription;
     private RadioGroup radioGroupAnswers;
     private RadioButton[] radioButtons = new RadioButton[4];
     private ProgressBar progressBar;
@@ -56,9 +59,12 @@ public class ArticleDetailActivity extends AppCompatActivity {
     private List<Quiz> quizzes = new ArrayList<>();
     private int currentQuizIndex = 0;
     private int score = 0;
+    private boolean quizAlreadyCompleted = false;
+    private int previousScore = 0;
 
-    // Ajouter le SessionManager pour accéder à l'ID de l'utilisateur connecté
-    private SessionManager sessionManager;
+    // Services et gestionnaires
+    private SharedPreferencesManager prefsManager;
+    private ScoreService scoreService;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,13 +72,18 @@ public class ArticleDetailActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_article_detail);
 
-        // Initialiser le SessionManager
-        sessionManager = new SessionManager(this);
+        // Initialiser le contexte pour RetrofitClient
+        RetrofitClient.setContext(getApplicationContext());
 
-        Log.d(TAG, "Vérification de la session au démarrage:");
-        Log.d(TAG, "Utilisateur connecté: " + sessionManager.isLoggedIn());
-        Log.d(TAG, "ID utilisateur: " + sessionManager.getUserId());
-        Log.d(TAG, "Nom d'utilisateur: " + sessionManager.getUsername());
+        // Initialiser les services
+        prefsManager = SharedPreferencesManager.getInstance(this);
+        scoreService = new ScoreService(this);
+
+        // Débogage complet de la session pour voir tous les détails
+        Log.d(TAG, "===== DÉBUT SESSION VÉRIFICATION =====");
+        prefsManager.debugPrintAllValues();
+        Log.d(TAG, "===== FIN SESSION VÉRIFICATION =====");
+
         initViews();
 
         // Assurez-vous que les cartes sont initialement invisibles
@@ -114,6 +125,8 @@ public class ArticleDetailActivity extends AppCompatActivity {
         radioGroupAnswers = findViewById(R.id.radioGroupAnswers);
         progressBar = findViewById(R.id.progressBar);
         backButton = findViewById(R.id.backButton);
+        textViewQuizTitle = findViewById(R.id.textViewQuizTitle);
+        textViewQuizDescription = findViewById(R.id.textViewQuizDescription);
 
         radioButtons[0] = findViewById(R.id.radioButtonAnswer1);
         radioButtons[1] = findViewById(R.id.radioButtonAnswer2);
@@ -127,6 +140,15 @@ public class ArticleDetailActivity extends AppCompatActivity {
         buttonStartQuiz.setOnClickListener(v -> {
             if (quizzes.isEmpty()) {
                 Toast.makeText(this, "Aucun quiz disponible pour cet article", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            // Vérification stricte: si l'utilisateur a déjà complété le quiz, ne pas
+            // laisser recommencer
+            if (quizAlreadyCompleted) {
+                // Message plus explicite pour l'utilisateur
+                Toast.makeText(this, "Vous avez déjà complété ce quiz et obtenu " +
+                        previousScore + "/" + quizzes.size() + " points", Toast.LENGTH_LONG).show();
                 return;
             }
 
@@ -203,9 +225,14 @@ public class ArticleDetailActivity extends AppCompatActivity {
                             article.setHasQuiz(true);
                         }
 
-
                         // Vérifier si l'utilisateur a déjà complété le quiz
-                        checkQuizCompletion(quizzes.get(0).getId());
+                        if (prefsManager.isLoggedIn()) {
+                            // Afficher le chargement pour indiquer la vérification en cours
+                            checkIfQuizCompleted(quizzes.get(0).getId());
+                        } else {
+                            // Si l'utilisateur n'est pas connecté, on met simplement la carte visible
+                            setupQuizCard(false, 0);
+                        }
 
                     } else {
                         startQuizCard.setVisibility(View.GONE);
@@ -227,44 +254,83 @@ public class ArticleDetailActivity extends AppCompatActivity {
                 Log.e(TAG, "Erreur lors du chargement des quiz", t);
                 showError("Erreur réseau: " + t.getMessage());
                 startQuizCard.setVisibility(View.GONE);
-
             }
         });
     }
 
     /**
-     * Vérifie si l'utilisateur a déjà complété le quiz
+     * Méthode améliorée pour vérifier si un quiz a déjà été complété
      */
-    private void checkQuizCompletion(Long quizId) {
-        if (!sessionManager.isLoggedIn()) {
-            // Si l'utilisateur n'est pas connecté, ne pas vérifier
+    private void checkIfQuizCompleted(Long quizId) {
+        showLoading(true);
+
+        // Vérification locale en premier
+        if (prefsManager.hasCompletedQuiz(quizId)) {
+            int localScore = prefsManager.getQuizScore(quizId);
+            Log.d(TAG, "Quiz complété trouvé localement: " + quizId + ", score: " + localScore);
+            quizAlreadyCompleted = true;
+            previousScore = localScore;
+            setupQuizCard(true, localScore);
+            showLoading(false);
             return;
         }
 
-        Long userId = sessionManager.getUserId();
-        ApiService apiService = RetrofitClient.getClient().create(ApiService.class);
-        Call<Map<String, Boolean>> call = apiService.checkQuizCompletion(userId, quizId);
-
-        call.enqueue(new Callback<Map<String, Boolean>>() {
+        // Si pas trouvé localement, vérifier avec le serveur
+        scoreService.checkQuizCompletion(quizId, new ScoreService.CheckCompletionCallback() {
             @Override
-            public void onResponse(Call<Map<String, Boolean>> call, Response<Map<String, Boolean>> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    Boolean completed = response.body().get("completed");
-                    if (completed != null && completed) {
-                        // L'utilisateur a déjà complété ce quiz
-                        sessionManager.markQuizAsCompleted(quizId);
-                        // Mettre à jour le bouton de démarrage
-                        buttonStartQuiz.setText("Refaire le quiz");
-                    }
+            public void onComplete(boolean isCompleted, int previousScore) {
+                showLoading(false);
+                quizAlreadyCompleted = isCompleted;
+                ArticleDetailActivity.this.previousScore = previousScore;
+
+                // Configurer la carte de quiz en fonction du résultat
+                setupQuizCard(isCompleted, previousScore);
+
+                // Enregistrer dans les préférences locales pour les prochaines fois
+                if (isCompleted) {
+                    prefsManager.markQuizAsCompleted(quizId);
+                    prefsManager.saveQuizScore(quizId, previousScore);
                 }
             }
 
             @Override
-            public void onFailure(Call<Map<String, Boolean>> call, Throwable t) {
-                Log.e(TAG, "Erreur lors de la vérification du quiz", t);
-
+            public void onError(String message) {
+                showLoading(false);
+                // En cas d'erreur, on suppose que le quiz n'a pas été complété
+                // pour donner une chance à l'utilisateur
+                Log.e(TAG, "Erreur lors de la vérification du quiz: " + message);
+                setupQuizCard(false, 0);
             }
         });
+    }
+
+    /**
+     * Configure l'apparence et le comportement de la carte de quiz
+     */
+    private void setupQuizCard(boolean isCompleted, int score) {
+        startQuizCard.setVisibility(View.VISIBLE);
+
+        if (isCompleted) {
+            // L'utilisateur a déjà complété ce quiz
+            String percentage = ScoreService.formatScoreAsPercentage(score, quizzes.size());
+
+            textViewQuizTitle.setText("Quiz déjà complété");
+            textViewQuizDescription.setText(String.format(
+                    "Vous avez déjà passé ce quiz et obtenu un score de %d/%d (%s)",
+                    score, quizzes.size(), percentage));
+
+            buttonStartQuiz.setText("Quiz déjà complété");
+            buttonStartQuiz.setEnabled(false);
+            buttonStartQuiz.setAlpha(0.7f);
+        } else {
+            // L'utilisateur n'a pas encore complété ce quiz
+            textViewQuizTitle.setText("Testez vos connaissances !");
+            textViewQuizDescription.setText("Répondez aux questions pour tester votre compréhension de cet article.");
+
+            buttonStartQuiz.setText("Commencer le Quiz");
+            buttonStartQuiz.setEnabled(true);
+            buttonStartQuiz.setAlpha(1.0f);
+        }
     }
 
     private void displayArticle() {
@@ -302,6 +368,9 @@ public class ArticleDetailActivity extends AppCompatActivity {
             }
 
             radioGroupAnswers.clearCheck();
+
+            // Mettre à jour le texte du bouton de soumission
+            buttonSubmitAnswer.setText("Valider ma réponse");
         }
     }
 
@@ -319,10 +388,10 @@ public class ArticleDetailActivity extends AppCompatActivity {
         boolean isCorrect = selectedAnswer.equals(currentQuiz.getReponseCorrecte());
         if (isCorrect) {
             score++;
-            textViewFeedback.setText("Correct ! Bonne réponse.");
+            textViewFeedback.setText("✓ Correct ! Bonne réponse.");
             textViewFeedback.setBackgroundResource(R.color.correctAnswerBackground);
         } else {
-            textViewFeedback.setText("Incorrect. La bonne réponse était : " + currentQuiz.getReponseCorrecte());
+            textViewFeedback.setText("✗ Incorrect. La bonne réponse était : " + currentQuiz.getReponseCorrecte());
             textViewFeedback.setBackgroundResource(R.color.incorrectAnswerBackground);
         }
 
@@ -343,117 +412,102 @@ public class ArticleDetailActivity extends AppCompatActivity {
 
         // Afficher la carte de résultat final
         int totalQuestions = quizzes.size();
-        double percentage = (double) score / totalQuestions * 100;
+        String percentage = ScoreService.formatScoreAsPercentage(score, totalQuestions);
 
-        // Sauvegarder le score dans la base de données
-        saveQuizScore();
+        showLoading(true);
+        // Sauvegarder le score dans la base de données si l'utilisateur est connecté
+        if (prefsManager.isLoggedIn() && !quizzes.isEmpty()) {
+            Long quizId = quizzes.get(0).getId();
+            Long userId = prefsManager.getUserId();
 
-        // Vous pouvez créer une nouvelle carte ou réutiliser startQuizCard
-        startQuizCard.setVisibility(View.VISIBLE);
-        TextView quizTitle = findViewById(R.id.textViewQuizTitle);
-        TextView quizDescription = findViewById(R.id.textViewQuizDescription);
+            // Ajouter un log détaillé avant l'envoi
+            Log.d(TAG, "Tentative de sauvegarde de score - Vérifications:");
+            Log.d(TAG, "isLoggedIn: " + prefsManager.isLoggedIn());
+            Log.d(TAG, "userId: " + userId);
+            Log.d(TAG, "quizId: " + quizId);
+            Log.d(TAG, "score: " + score);
+            Log.d(TAG, "totalQuestions: " + totalQuestions);
 
-        quizTitle.setText("Quiz terminé !");
-        quizDescription.setText(String.format("Votre score : %d/%d (%.1f%%)", score, totalQuestions, percentage));
+            // Vérifier que l'ID utilisateur est bien valide
+            if (userId <= 0) {
+                Log.e(TAG, "ID utilisateur invalide: " + userId);
+                showLoading(false);
+                Toast.makeText(ArticleDetailActivity.this, "Erreur: ID utilisateur invalide", Toast.LENGTH_SHORT)
+                        .show();
+                showLoginDialog();
+                displayFinalResults(percentage);
+                return;
+            }
 
-        buttonStartQuiz.setText("Recommencer");
-        buttonStartQuiz.setOnClickListener(v -> {
-            // Réinitialiser le quiz
-            currentQuizIndex = 0;
-            score = 0;
-            startQuizCard.setVisibility(View.GONE);
-            quizSectionCard.setVisibility(View.VISIBLE);
-            displayCurrentQuiz();
-        });
+            // Vérifier encore une fois avant de sauvegarder
+            if (quizAlreadyCompleted) {
+                Log.d(TAG, "Quiz déjà complété, pas besoin de sauvegarder à nouveau");
+                showLoading(false);
+                displayFinalResults(percentage);
+                return;
+            }
+
+            scoreService.saveQuizScore(quizId, score, totalQuestions, new ScoreService.ScoreCallback() {
+                @Override
+                public void onSuccess(ScoreResponse response) {
+                    showLoading(false);
+                    Toast.makeText(ArticleDetailActivity.this, "Score sauvegardé avec succès!", Toast.LENGTH_SHORT)
+                            .show();
+
+                    // Marquer le quiz comme complété localement
+                    quizAlreadyCompleted = true;
+                    previousScore = score;
+
+                    // Afficher les résultats finaux
+                    displayFinalResults(percentage);
+                }
+
+                @Override
+                public void onError(String message) {
+                    showLoading(false);
+                    Log.e(TAG, "Erreur lors de la sauvegarde du score: " + message);
+                    Toast.makeText(ArticleDetailActivity.this, message, Toast.LENGTH_SHORT).show();
+                    // Afficher quand même les résultats
+                    displayFinalResults(percentage);
+                }
+            });
+        } else {
+            showLoading(false);
+            Log.e(TAG, "Impossible d'enregistrer le score - Utilisateur connecté: " + prefsManager.isLoggedIn()
+                    + ", Quizzes disponibles: " + !quizzes.isEmpty());
+            if (!prefsManager.isLoggedIn()) {
+                showLoginDialog();
+            }
+            // Afficher les résultats même si non connecté
+            displayFinalResults(percentage);
+        }
     }
 
     /**
-     * Sauvegarde le score de l'utilisateur dans la base de données
+     * Affiche les résultats finaux du quiz
      */
-    private void saveQuizScore() {
-        // Vérifier la session et afficher toutes les données pour le débogage
-        sessionManager.debugPrintAllValues();
+    private void displayFinalResults(String percentage) {
+        int totalQuestions = quizzes.size();
 
-        // Vérifier si l'utilisateur est connecté et obtenir l'ID utilisateur
-        Long userId = sessionManager.getUserId();
+        // Réutiliser startQuizCard pour afficher le résultat
+        startQuizCard.setVisibility(View.VISIBLE);
+        textViewQuizTitle.setText("Quiz terminé !");
+        textViewQuizDescription.setText(String.format("Votre score : %d/%d (%s)", score, totalQuestions, percentage));
 
-        // Vérification plus robuste de l'état de connexion
-        if (!sessionManager.isLoggedIn()) {
-            Toast.makeText(this, "Connectez-vous pour sauvegarder votre score", Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "Échec de sauvegarde du score: Utilisateur non connecté");
+        // Désactiver le bouton pour ne pas permettre de refaire le quiz
+        buttonStartQuiz.setText("Quiz complété");
+        buttonStartQuiz.setEnabled(false);
+        buttonStartQuiz.setAlpha(0.7f); // Apparence visuelle désactivée
 
-            // Proposer à l'utilisateur de se reconnecter
-            showLoginDialog();
-            return;
-        }
-
-        if (userId == null || userId <= 0) {
-            Toast.makeText(this, "ID utilisateur invalide. Veuillez vous reconnecter.", Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "Échec de sauvegarde du score: ID utilisateur invalide: " + userId);
-
-            // Déconnecter l'utilisateur et proposer de se reconnecter
-            sessionManager.logout();
-            showLoginDialog();
-            return;
-        }
-
-        // Assurez-vous que nous avons des quiz à traiter
-        if (quizzes == null || quizzes.isEmpty()) {
-            Toast.makeText(this, "Erreur: Aucun quiz disponible", Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "Échec de sauvegarde du score: Aucun quiz disponible");
-            return;
-        }
-
-        // Obtenir l'ID du quiz
-        Quiz currentQuiz = quizzes.get(0); // Prendre le premier quiz (ou autre logique selon votre modèle)
-        Long quizId = currentQuiz.getId();
-
-        // Journaliser les informations avant l'appel API
-        Log.d(TAG, "Tentative de sauvegarde du score - UserId: " + userId + ", QuizId: " + quizId + ", Score: " + score);
-
-        showLoading(true);
-
-        ApiService apiService = RetrofitClient.getClient().create(ApiService.class);
-        Call<ScoreResponse> call = apiService.submitQuizScore(userId, quizId, score);
-
-        call.enqueue(new Callback<ScoreResponse>() {
-            @Override
-            public void onResponse(Call<ScoreResponse> call, Response<ScoreResponse> response) {
-                showLoading(false);
-
-                if (response.isSuccessful() && response.body() != null) {
-                    ScoreResponse scoreResponse = response.body();
-                    Log.d(TAG, "Score sauvegardé avec succès: " + scoreResponse.toString());
-                    Toast.makeText(ArticleDetailActivity.this, "Score sauvegardé avec succès!", Toast.LENGTH_SHORT).show();
-
-                    // Marquer le quiz comme complété localement
-                    sessionManager.markQuizAsCompleted(quizId);
-                    sessionManager.saveQuizScore(quizId, score);
-                } else {
-                    // Journaliser plus de détails sur l'erreur
-                    try {
-                        Log.e(TAG, "Erreur lors de la sauvegarde du score: " + response.code());
-                        Log.e(TAG, "Réponse d'erreur: " + (response.errorBody() != null ? response.errorBody().string() : "null"));
-                    } catch (Exception e) {
-                        Log.e(TAG, "Erreur lors de la lecture de l'erreur", e);
-                    }
-                    Toast.makeText(ArticleDetailActivity.this, "Erreur lors de la sauvegarde du score: " + response.code(), Toast.LENGTH_SHORT).show();
-                }
-            }
-
-            @Override
-            public void onFailure(Call<ScoreResponse> call, Throwable t) {
-                showLoading(false);
-                Log.e(TAG, "Erreur réseau lors de la sauvegarde du score", t);
-                Toast.makeText(ArticleDetailActivity.this, "Erreur réseau: " + t.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-        });
+        // Marquer comme complété localement pour cette session
+        quizAlreadyCompleted = true;
+        previousScore = score;
     }
 
     private void showLoginDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Connexion requise");
-        builder.setMessage("Votre session semble avoir expiré. Voulez-vous vous reconnecter ?");
+        builder.setMessage("Connectez-vous pour sauvegarder votre score et suivre votre progression");
         builder.setPositiveButton("Se connecter", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
@@ -462,7 +516,7 @@ public class ArticleDetailActivity extends AppCompatActivity {
                 finish();
             }
         });
-        builder.setNegativeButton("Annuler", null);
+        builder.setNegativeButton("Plus tard", null);
         builder.show();
     }
 
@@ -470,7 +524,98 @@ public class ArticleDetailActivity extends AppCompatActivity {
         progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Vérifier si l'état de connexion a changé
+        Log.d(TAG, "onResume - Vérification de l'état de connexion");
+        Log.d(TAG, "===== DÉBUT VÉRIFICATION CONNEXION ONRESUME =====");
+        prefsManager.debugPrintAllValues();
+        Log.d(TAG, "===== FIN VÉRIFICATION CONNEXION ONRESUME =====");
+
+        // Si l'article et le quiz sont chargés, vérifier à nouveau si le quiz est
+        // complété
+        if (article != null && !quizzes.isEmpty() && prefsManager.isLoggedIn()) {
+            Log.d(TAG, "onResume - Vérification à nouveau si le quiz est complété");
+            checkIfQuizCompleted(quizzes.get(0).getId());
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        // Si l'utilisateur est au milieu d'un quiz, demander confirmation
+        if (quizSectionCard.getVisibility() == View.VISIBLE) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Quitter le quiz ?")
+                    .setMessage("Êtes-vous sûr de vouloir quitter ce quiz ? Votre progression sera perdue.")
+                    .setPositiveButton("Quitter", (dialog, which) -> finish())
+                    .setNegativeButton("Continuer", null)
+                    .show();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
     private void showError(String message) {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+    }
+
+    private void displayResults() {
+        // Débogage avant la vérification de connexion
+        Log.d(TAG, "===== DÉBUT VÉRIFICATION CONNEXION =====");
+        prefsManager.debugPrintAllValues();
+        Log.d(TAG, "===== FIN VÉRIFICATION CONNEXION =====");
+
+        // Vérifier si l'utilisateur est connecté
+        if (!prefsManager.isLoggedIn()) {
+            Log.d(TAG, "Utilisateur non connecté - Affichage des résultats sans sauvegarde");
+            showResultsDialog(false);
+            return;
+        }
+
+        Log.d(TAG, "Utilisateur connecté - Tentative de sauvegarde du score");
+        // Sauvegarder le score localement
+        prefsManager.saveQuizScore(article.getId(), score);
+        prefsManager.markQuizAsCompleted(article.getId());
+
+        // Sauvegarder le score sur le serveur
+        scoreService.saveQuizScore(article.getId(), score, quizzes.size(), new ScoreService.ScoreCallback() {
+            @Override
+            public void onSuccess(ScoreResponse response) {
+                Log.d(TAG, "Score sauvegardé avec succès sur le serveur");
+                showResultsDialog(true);
+            }
+
+            @Override
+            public void onError(String message) {
+                Log.e(TAG, "Erreur lors de la sauvegarde du score: " + message);
+                // Même en cas d'échec de la sauvegarde sur le serveur, on affiche les résultats
+                // car le score est déjà sauvegardé localement
+                showResultsDialog(true);
+            }
+        });
+    }
+
+    private void showResultsDialog(boolean isLoggedIn) {
+        Log.d(TAG, "Affichage de la boîte de dialogue des résultats - isLoggedIn: " + isLoggedIn);
+        StringBuilder message = new StringBuilder();
+        message.append("Votre score : ").append(score).append("/").append(quizzes.size()).append("\n\n");
+
+        if (isLoggedIn) {
+            message.append("Score sauvegardé avec succès !");
+        } else {
+            message.append("Connectez-vous pour sauvegarder votre score et suivre votre progression.");
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Résultats du Quiz")
+                .setMessage(message.toString())
+                .setPositiveButton("OK", (dialog, which) -> {
+                    dialog.dismiss();
+                    finish();
+                })
+                .setCancelable(false)
+                .show();
     }
 }
