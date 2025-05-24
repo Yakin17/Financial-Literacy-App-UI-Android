@@ -14,7 +14,7 @@ import com.example.financial_app.network.RetrofitClient;
 import com.example.financial_app.util.SharedPreferencesManager;
 import android.util.Log;
 import com.example.financial_app.network.ApiService;
-import com.example.financial_app.model.UserStats;
+
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -26,7 +26,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
     private TextView textViewWelcome, textViewEmail, textViewUsername, textViewQuizStats;
-    private ImageButton logoutButton;
+    private ImageButton logoutButton, profileButton;
     private ConstraintLayout startLearningButton;
     private SharedPreferencesManager prefsManager;
     private Button buttonLogin, buttonLogout;
@@ -55,14 +55,7 @@ public class MainActivity extends AppCompatActivity {
         getSupportActionBar().setDisplayShowTitleEnabled(false);
 
         // Initialize views
-        textViewWelcome = findViewById(R.id.textViewWelcome);
-        textViewEmail = findViewById(R.id.textViewEmail);
-        textViewUsername = findViewById(R.id.textViewUsername);
-        logoutButton = findViewById(R.id.logoutButton);
-        startLearningButton = findViewById(R.id.startLearningButton);
-        textViewQuizStats = findViewById(R.id.textViewQuizStats);
-        buttonLogin = findViewById(R.id.buttonLogin);
-        buttonLogout = findViewById(R.id.buttonLogout);
+        initViews();
 
         // Get user information
         String username = prefsManager.getUsername();
@@ -74,6 +67,25 @@ public class MainActivity extends AppCompatActivity {
         textViewEmail.setText(email);
         textViewUsername.setText(username);
 
+        // Setup click listeners
+        setupClickListeners();
+
+        checkLoginStatus();
+    }
+
+    private void initViews() {
+        textViewWelcome = findViewById(R.id.textViewWelcome);
+        textViewEmail = findViewById(R.id.textViewEmail);
+        textViewUsername = findViewById(R.id.textViewUsername);
+        logoutButton = findViewById(R.id.logoutButton);
+        profileButton = findViewById(R.id.profileButton);
+        startLearningButton = findViewById(R.id.startLearningButton);
+        textViewQuizStats = findViewById(R.id.textViewQuizStats);
+        buttonLogin = findViewById(R.id.buttonLogin);
+        buttonLogout = findViewById(R.id.buttonLogout);
+    }
+
+    private void setupClickListeners() {
         // Start Learning button click listener
         startLearningButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -87,15 +99,58 @@ public class MainActivity extends AppCompatActivity {
         logoutButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Clear user session
-                prefsManager.clearSession();
-
-                // Redirect to login
-                goToLoginActivity();
+                logout();
             }
         });
 
-        checkLoginStatus();
+        // Profile button click listener - NOUVEAU
+        if (profileButton != null) {
+            profileButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
+                    startActivity(intent);
+                }
+            });
+        }
+
+        // Login button click listener
+        if (buttonLogin != null) {
+            buttonLogin.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    goToLoginActivity();
+                }
+            });
+        }
+
+        // Logout button (dans le card) click listener
+        if (buttonLogout != null) {
+            buttonLogout.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    logout();
+                }
+            });
+        }
+
+        // Click listener pour le nom d'utilisateur dans la toolbar - accès au profil
+        textViewUsername.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (prefsManager.isLoggedIn()) {
+                    Intent intent = new Intent(MainActivity.this, ProfileActivity.class);
+                    startActivity(intent);
+                }
+            }
+        });
+    }
+
+    private void logout() {
+        // Clear user session
+        prefsManager.clearSession();
+        // Redirect to login
+        goToLoginActivity();
     }
 
     private void goToLoginActivity() {
@@ -120,8 +175,8 @@ public class MainActivity extends AppCompatActivity {
             loadUserStats();
 
             // Afficher les boutons de connexion/déconnexion appropriés
-            buttonLogin.setVisibility(View.GONE);
-            buttonLogout.setVisibility(View.VISIBLE);
+            if (buttonLogin != null) buttonLogin.setVisibility(View.GONE);
+            if (buttonLogout != null) buttonLogout.setVisibility(View.VISIBLE);
         } else {
             // Réinitialiser l'interface utilisateur
             textViewUsername.setText("Non connecté");
@@ -129,8 +184,8 @@ public class MainActivity extends AppCompatActivity {
             textViewQuizStats.setText("Quiz complétés: 0\nScore moyen: 0%");
 
             // Afficher les boutons de connexion/déconnexion appropriés
-            buttonLogin.setVisibility(View.VISIBLE);
-            buttonLogout.setVisibility(View.GONE);
+            if (buttonLogin != null) buttonLogin.setVisibility(View.VISIBLE);
+            if (buttonLogout != null) buttonLogout.setVisibility(View.GONE);
         }
     }
 
@@ -185,5 +240,14 @@ public class MainActivity extends AppCompatActivity {
     private void updateQuizStats(String statsText) {
         Log.d(TAG, "Mise à jour des statistiques affichées");
         textViewQuizStats.setText(statsText);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Rafraîchir les informations utilisateur au retour de ProfileActivity
+        if (prefsManager.isLoggedIn()) {
+            checkLoginStatus();
+        }
     }
 }

@@ -1,45 +1,26 @@
 package com.example.financial_app.service;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.util.Log;
 
-import com.android.volley.AuthFailureError;
-import com.android.volley.DefaultRetryPolicy;
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonArrayRequest;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
 import com.example.financial_app.model.Article;
+import com.example.financial_app.network.ApiService;
+import com.example.financial_app.network.RetrofitClient;
 import com.example.financial_app.util.SharedPreferencesManager;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
 
 public class ArticleService {
     private static final String TAG = "ArticleService";
-    private static final String BASE_URL = "http://192.168.1.128:8080/api"; // Remplacez par votre URL d'API
-    private RequestQueue requestQueue;
-    private Context context;
-    private SharedPreferences sharedPreferences;
-
-    public ArticleService(Context context) {
-        this.context = context;
-        this.requestQueue = Volley.newRequestQueue(context);
-        this.sharedPreferences = context.getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
-    }
+    private final Context context;
+    private final SharedPreferencesManager prefsManager;
+    private final ApiService apiService;
 
     public interface ArticleCallback {
         void onSuccess(List<Article> articles);
@@ -47,157 +28,46 @@ public class ArticleService {
         void onError(String message);
     }
 
+    public ArticleService(Context context) {
+        this.context = context;
+        this.prefsManager = SharedPreferencesManager.getInstance(context);
+        this.apiService = RetrofitClient.getClient().create(ApiService.class);
+    }
+
     public void getAllArticles(final ArticleCallback callback) {
-        String url = BASE_URL + "/articles";
-        Log.d(TAG, "Tentative de récupération des articles depuis: " + url);
+        Log.d(TAG, "Chargement des articles depuis l'API...");
 
-        // D'abord, faisons un test avec une requête String pour voir la réponse exacte
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
-                new Response.Listener<String>() {
-                    @Override
-                    public void onResponse(String response) {
-                        Log.d(TAG, "Réponse brute reçue: " + response);
+        if (!prefsManager.isLoggedIn()) {
+            Log.e(TAG, "Utilisateur non connecté");
+            callback.onError("Session expirée. Veuillez vous reconnecter.");
+            return;
+        }
 
-                        // Maintenant, essayons de parser la réponse en JSON
-                        try {
-                            JSONArray jsonArray = new JSONArray(response);
-                            Log.d(TAG, "JSONArray créé avec succès, contient " + jsonArray.length() + " éléments");
-
-                            List<Article> articles = parseArticlesFromJson(jsonArray);
-                            callback.onSuccess(articles);
-                        } catch (JSONException e) {
-                            Log.e(TAG, "Erreur lors du parsing de la réponse JSON", e);
-                            callback.onError("Format de réponse invalide: " + e.getMessage());
-                        }
-                    }
-                },
-                new Response.ErrorListener() {
-                    @Override
-                    public void onErrorResponse(VolleyError error) {
-                        logVolleyError(error);
-                        String errorMessage = createErrorMessage(error);
-                        callback.onError(errorMessage);
-                    }
-                }) {
+        apiService.getAllArticles().enqueue(new Callback<List<Article>>() {
             @Override
-            public Map<String, String> getHeaders() throws AuthFailureError {
-                return createAuthHeaders();
-            }
-        };
-
-        // Configurer une politique de nouvelle tentative
-        stringRequest.setRetryPolicy(new DefaultRetryPolicy(
-                10000, // 10 secondes de timeout
-                2, // 2 tentatives max
-                DefaultRetryPolicy.DEFAULT_BACKOFF_MULT));
-
-        Log.d(TAG, "Ajout de la requête à la file d'attente");
-        requestQueue.add(stringRequest);
-    }
-
-    private List<Article> parseArticlesFromJson(JSONArray jsonArray) throws JSONException {
-        List<Article> articles = new ArrayList<>();
-
-        for (int i = 0; i < jsonArray.length(); i++) {
-            JSONObject articleObject = jsonArray.getJSONObject(i);
-            Log.d(TAG, "Parsing de l'article " + i + ": " + articleObject.toString());
-
-            Article article = new Article();
-
-            // Extraction des champs obligatoires
-            article.setId(articleObject.getLong("id"));
-            article.setTitre(articleObject.getString("titre"));
-            article.setContenu(articleObject.getString("contenu"));
-
-            // Extraction de la date avec gestion des erreurs
-            try {
-                String dateStr = articleObject.getString("datePublication");
-                DateTimeFormatter formatter = DateTimeFormatter.ISO_DATE_TIME;
-                LocalDateTime dateTime = LocalDateTime.parse(dateStr, formatter);
-                article.setDatePublication(dateTime);
-            } catch (DateTimeParseException e) {
-                Log.e(TAG, "Erreur lors du parsing de la date, utilisation de la date actuelle", e);
-                article.setDatePublication(LocalDateTime.now());
+            public void onResponse(Call<List<Article>> call, Response<List<Article>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    Log.d(TAG, "Articles chargés avec succès: " + response.body().size() + " articles");
+                    callback.onSuccess(response.body());
+                } else {
+                    String errorMessage = "Erreur lors du chargement des articles";
+                    if (response.code() == 401) {
+                        errorMessage = "Session expirée. Veuillez vous reconnecter.";
+                        prefsManager.clearSession();
+                    } else if (response.code() == 403) {
+                        errorMessage = "Accès non autorisé";
+                    }
+                    Log.e(TAG, "Erreur API: " + response.code() + " - " + errorMessage);
+                    callback.onError(errorMessage);
+                }
             }
 
-            // Extraction des informations sur l'auteur
-            article.setAuteurId(articleObject.getLong("auteurId"));
-            article.setAuteurNom(articleObject.getString("auteurNom"));
-
-            // Vérification des quizzes
-            boolean hasQuiz = false;
-            if (articleObject.has("quizzes") && !articleObject.isNull("quizzes")) {
-                JSONArray quizzes = articleObject.getJSONArray("quizzes");
-                hasQuiz = quizzes.length() > 0;
+            @Override
+            public void onFailure(Call<List<Article>> call, Throwable t) {
+                Log.e(TAG, "Erreur réseau lors du chargement des articles", t);
+                callback.onError("Erreur réseau: " + t.getMessage());
             }
-            article.setHasQuiz(hasQuiz);
-
-            articles.add(article);
-            Log.d(TAG, "Article ajouté: ID=" + article.getId() + ", Titre=" + article.getTitre());
-        }
-
-        Log.d(TAG, "Nombre total d'articles parsés: " + articles.size());
-        return articles;
-    }
-
-    private Map<String, String> createAuthHeaders() {
-        Map<String, String> headers = new HashMap<>();
-        SharedPreferencesManager prefsManager = SharedPreferencesManager.getInstance(context);
-        String token = prefsManager.getToken();
-        Log.d(TAG, "Token d'authentification: " + (token.isEmpty() ? "absent" : "présent"));
-
-        if (!token.isEmpty()) {
-            headers.put("Authorization", "Bearer " + token);
-            Log.d(TAG, "En-tête d'authentification ajouté: Bearer " + token);
-        } else {
-            Log.e(TAG, "Aucun token d'authentification trouvé dans les préférences");
-        }
-
-        // Ajouter des en-têtes Accept pour garantir que le serveur renvoie du JSON
-        headers.put("Accept", "application/json");
-        headers.put("Content-Type", "application/json");
-        return headers;
-    }
-
-    private void logVolleyError(VolleyError error) {
-        if (error.networkResponse != null) {
-            Log.e(TAG, "Erreur réseau: code=" + error.networkResponse.statusCode +
-                    ", data="
-                    + (error.networkResponse.data != null ? new String(error.networkResponse.data) : "aucune donnée"));
-        } else {
-            Log.e(TAG, "Erreur sans réponse réseau: " + error.toString(), error);
-        }
-    }
-
-    private String createErrorMessage(VolleyError error) {
-        String errorMessage = "Impossible de récupérer les articles. ";
-
-        if (error.networkResponse != null) {
-            switch (error.networkResponse.statusCode) {
-                case 401:
-                    errorMessage += "Authentification requise.";
-                    break;
-                case 403:
-                    errorMessage += "Accès non autorisé.";
-                    break;
-                case 404:
-                    errorMessage += "Service introuvable.";
-                    break;
-                case 500:
-                    errorMessage += "Erreur serveur interne.";
-                    break;
-                default:
-                    errorMessage += "Code d'erreur: " + error.networkResponse.statusCode;
-            }
-        } else if (error.getMessage() != null) {
-            errorMessage += error.getMessage();
-        } else if (error instanceof AuthFailureError) {
-            errorMessage += "Erreur d'authentification.";
-        } else {
-            errorMessage += "Erreur de connexion. Vérifiez votre connexion Internet.";
-        }
-
-        return errorMessage;
+        });
     }
 
     public void getMockArticles(final ArticleCallback callback) {

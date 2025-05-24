@@ -6,7 +6,9 @@ import com.example.financial_app.model.LoginResponse;
 import com.example.financial_app.model.Quiz;
 import com.example.financial_app.model.Score;
 import com.example.financial_app.model.ScoreResponse;
-import com.example.financial_app.model.UserStats;
+
+import com.example.financial_app.model.UtilisateurDTO;
+import com.example.financial_app.model.UtilisateurUpdateRequest;
 
 import java.util.List;
 import java.util.Map;
@@ -21,6 +23,7 @@ import retrofit2.http.Path;
 import retrofit2.http.Query;
 
 public interface ApiService {
+        // Articles endpoints
         @GET("articles")
         Call<List<Article>> getAllArticles();
 
@@ -67,9 +70,22 @@ public interface ApiService {
                         @Path("utilisateurId") Long utilisateurId,
                         @Path("quizId") Long quizId);
 
-        @GET("users/{userId}/stats")
-        Call<UserStats> getUserStats(@Path("userId") Long userId);
-
-        @GET("api/scores/utilisateur/{utilisateurId}")
+        @GET("scores/utilisateur/{utilisateurId}")
         Call<List<Score>> getUserScores(@Path("utilisateurId") Long utilisateurId);
+
+        // User endpoints - CORRIGÉS (suppression du préfixe "api/" redondant)
+        @GET("utilisateurs/{id}")
+        Call<UtilisateurDTO> getUserById(@Path("id") Long id);
+
+        @PUT("utilisateurs/{id}")
+        Call<UtilisateurDTO> updateUser(@Path("id") Long id, @Body UtilisateurUpdateRequest updateRequest);
+
+        @GET("utilisateurs")
+        Call<List<UtilisateurDTO>> getAllUsers();
+
+        @POST("utilisateurs")
+        Call<UtilisateurDTO> createUser(@Body UtilisateurUpdateRequest userRequest);
+
+        @DELETE("utilisateurs/{id}")
+        Call<Void> deleteUser(@Path("id") Long id);
 }
